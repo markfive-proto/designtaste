@@ -1,0 +1,68 @@
+{
+  "name": "vibe-ui-assistant",
+  "version": "0.1.0",
+  "description": "AI-powered Next.js application to help vibe coders improve UI/UX quality with design inspiration and code generation",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "build:extension": "webpack --mode production",
+    "dev:extension": "webpack --mode development --watch"
+  },
+  "dependencies": {
+    "next": "14.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@supabase/supabase-js": "^2.38.4",
+    "@supabase/auth-helpers-nextjs": "^0.8.7",
+    "@supabase/auth-helpers-react": "^0.4.2",
+    "framer-motion": "^10.16.16",
+    "openai": "^4.20.1",
+    "axios": "^1.6.2",
+    "lucide-react": "^0.294.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.2.0",
+    "@radix-ui/react-slot": "^1.0.2",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/chrome": "^0.0.251",
+    "typescript": "^5.3.2",
+    "tailwindcss": "^3.3.6",
+    "postcss": "^8.4.32",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.54.0",
+    "eslint-config-next": "14.0.4",
+    "@typescript-eslint/eslint-plugin": "^6.13.1",
+    "@typescript-eslint/parser": "^6.13.1",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "copy-webpack-plugin": "^11.0.0",
+    "ts-loader": "^9.5.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/vibe-ui-assistant"
+  },
+  "keywords": [
+    "nextjs",
+    "react",
+    "ui-ux",
+    "design",
+    "ai",
+    "tailwindcss",
+    "framer-motion",
+    "magic-ui",
+    "supabase",
+    "chrome-extension"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
