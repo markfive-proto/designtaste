@@ -33,21 +33,30 @@ Vibe UI Assistant is a browser-based tool (initially a Chrome extension) that al
 
 ### **Core Features**
 
-### **a. UI Block Selection**
+### **a. UI Block Selection & Queue Management**
 
 - Let user select a section of the webpage via click and highlight
 - Capture DOM + bounding box + screenshot of selected element
+- **Background Processing**: Option to add elements to processing queue
+- **Multi-Selection**: Select multiple elements across different pages
+- **Queue Management**: View, prioritize, and manage queued elements
 
-### **b. Screenshot + DOM Analysis**
+### **b. Parallel AI Analysis**
 
-- Send screenshot to Vision AI (e.g. GPT-4 Vision or LLaVA)
+- **Background Processing**: Each queued element processed simultaneously
+- Send screenshot to Vision AI (e.g. GPT-4 Vision)
 - Extract component type (e.g. hero section, card, form)
 - Analyze spacing, contrast, alignment, hierarchy
+- **Real-time Updates**: WebSocket notifications for processing status
+- **Cross-Element Learning**: Identify patterns across multiple selections
 
-### **c. Design Inspiration Fetcher**
+### **c. Parallel Inspiration Search**
 
+- **Concurrent Processing**: Each element gets simultaneous inspiration search
 - Query Mobbin API (or local vector DB) for similar UI examples
-- Display a scrollable gallery of inspirational components
+- **Smart Filtering**: Learn from user preferences across elements
+- Display scrollable gallery of inspirational components per element
+- **Batch Discovery**: Find cohesive design systems across multiple elements
 
 ### **d. Prompt Generator**
 
@@ -80,6 +89,10 @@ Vibe UI Assistant is a browser-based tool (initially a Chrome extension) that al
 **As a frontend developer**, I want to copy optimized Tailwind code that improves spacing and hierarchy without guessing.
 
 **As a beginner**, I want to see side-by-side comparisons of my design and a better one so I can learn visually.
+
+**As a busy developer**, I want to select multiple UI elements and let them process in the background while I continue working, so I can batch-review improvements later.
+
+**As a design-conscious coder**, I want to analyze my entire website systematically and receive suggestions for a cohesive design system across all components.
 
 ---
 
@@ -117,11 +130,11 @@ Vibe UI Assistant is a browser-based tool (initially a Chrome extension) that al
 
 | **Week** | **Milestone** |
 | --- | --- |
-| 1-2 | UI selection + screenshot capture |
-| 2-3 | GPT Vision + prompt generation working |
-| 3-4 | Inspiration gallery retrieval from Mobbin/DB |
-| 4-5 | Code generation and copy/share interface |
-| 6 | MVP test, feedback, and iteration |
+| 1-2 | UI selection + screenshot capture + background queue system |
+| 2-3 | GPT Vision + parallel processing + real-time updates |
+| 3-4 | Multi-element inspiration gallery + batch operations |
+| 4-5 | Code generation + design system consistency + export options |
+| 6 | MVP test with multi-element workflows + feedback iteration |
 
 ---
 

@@ -9,8 +9,9 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "build:extension": "webpack --mode production",
-    "dev:extension": "webpack --mode development --watch"
+    "build:extension": "cd extension && webpack --mode production",
+    "dev:extension": "cd extension && webpack --mode development --watch",
+    "package:extension": "cd extension && npm run build && zip -r ../public/vibe-ui-assistant.zip dist/*"
   },
   "dependencies": {
     "next": "14.0.4",

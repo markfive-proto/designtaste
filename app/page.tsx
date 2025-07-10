@@ -58,11 +58,11 @@ export default function HomePage() {
           transition={{ duration: 0.6, delay: 0.4 }}
           className="text-center"
         >
-          <Button size="lg" className="mr-4">
-            Get Started
+          <Button asChild size="lg" className="mr-4">
+            <a href="/dashboard">Get Started</a>
           </Button>
-          <Button variant="outline" size="lg">
-            Install Extension
+          <Button asChild variant="outline" size="lg">
+            <a href="/install">Install Extension</a>
           </Button>
         </motion.div>
       </motion.div>
