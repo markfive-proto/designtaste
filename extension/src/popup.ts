@@ -34,10 +34,18 @@ class PopupManager {
     const popup = document.getElementById('popup');
     if (!popup) return;
 
+    // Check auth status first
+    const authStatus = await this.getAuthStatus();
+
     popup.innerHTML = `
       <div class="popup-header">
-        <h2>Vibe UI Assistant</h2>
-        <div class="status" id="status">●</div>
+        <div class="header-content">
+          <h2>Vibe UI Assistant</h2>
+          <div class="status" id="status">●</div>
+        </div>
+        <div class="user-section" id="userSection">
+          ${authStatus.authenticated ? this.renderUserInfo(authStatus.user) : this.renderSignInPrompt()}
+        </div>
       </div>
       
       <div class="queue-section">
@@ -65,6 +73,44 @@ class PopupManager {
     this.statusEl = document.getElementById('status');
   }
 
+  private async getAuthStatus(): Promise<{ authenticated: boolean; user?: any }> {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'CHECK_AUTH' });
+      return response;
+    } catch (error) {
+      return { authenticated: false };
+    }
+  }
+
+  private renderUserInfo(user: any): string {
+    const avatar = user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || user?.email || 'User')}&size=32&background=3B82F6&color=fff`;
+    const name = user?.name || user?.email?.split('@')[0] || 'User';
+    
+    return `
+      <div class="user-info">
+        <img src="${avatar}" alt="User avatar" class="user-avatar" />
+        <div class="user-details">
+          <div class="user-name">${name}</div>
+          <div class="user-status">✅ Signed in</div>
+        </div>
+        <button id="signOut" class="sign-out-btn" title="Sign out">⚙️</button>
+      </div>
+    `;
+  }
+
+  private renderSignInPrompt(): string {
+    return `
+      <div class="sign-in-prompt">
+        <div class="sign-in-icon">👤</div>
+        <div class="sign-in-text">
+          <div class="sign-in-title">Not signed in</div>
+          <div class="sign-in-subtitle">Limited to 1 free suggestion</div>
+        </div>
+        <button id="signInBtn" class="sign-in-btn">Sign In</button>
+      </div>
+    `;
+  }
+
   private attachEventListeners() {
     // Select Element button
     document.getElementById('selectElement')?.addEventListener('click', () => {
@@ -89,6 +135,20 @@ class PopupManager {
     // Settings button
     document.getElementById('settings')?.addEventListener('click', () => {
       this.openSettings();
+    });
+
+    // Sign in button
+    document.getElementById('signInBtn')?.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ 
+        type: 'OPEN_TAB', 
+        url: 'http://localhost:3000/auth/signup' 
+      });
+      window.close();
+    });
+
+    // Sign out button
+    document.getElementById('signOut')?.addEventListener('click', () => {
+      this.handleSignOut();
     });
   }
 
@@ -302,6 +362,24 @@ class PopupManager {
   private openSettings() {
     chrome.tabs.create({ url: 'http://localhost:3000/settings' });
     window.close();
+  }
+
+  private async handleSignOut() {
+    try {
+      // Clear extension storage
+      await chrome.storage.local.clear();
+      
+      // Open sign out page
+      chrome.runtime.sendMessage({ 
+        type: 'OPEN_TAB', 
+        url: 'http://localhost:3000/auth/signout' 
+      });
+      
+      // Refresh popup
+      window.location.reload();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
   }
 }
 

@@ -645,6 +645,13 @@ class ElementSelector {
   }
 
   private showSignUpPrompt(message: string, usageCount: number) {
+    // Force deactivate the selector to prevent interaction conflicts
+    this.isActive = false;
+    this.removeOverlay();
+    this.removeEventListeners();
+    this.clearSelection();
+    this.removeHighlight();
+    
     const promptEl = document.createElement('div');
     promptEl.style.cssText = `
       position: fixed;
@@ -729,15 +736,18 @@ class ElementSelector {
     
     const closePrompt = () => {
       promptEl.remove();
-      this.deactivate();
+      // No need to deactivate again since we already did it above
     };
     
     closeBtn?.addEventListener('click', closePrompt);
     closeAltBtn?.addEventListener('click', closePrompt);
     
     signupBtn?.addEventListener('click', () => {
-      // Open the app's signup page
-      chrome.tabs.create({ url: 'http://localhost:3000/auth/signup' });
+      // Open the app's signup page via background script
+      chrome.runtime.sendMessage({ 
+        type: 'OPEN_TAB', 
+        url: 'http://localhost:3000/auth/signup' 
+      });
       closePrompt();
     });
     
@@ -745,7 +755,7 @@ class ElementSelector {
     setTimeout(() => {
       if (document.body.contains(promptEl)) {
         promptEl.remove();
-        this.deactivate();
+        // No need to deactivate again since we already did it above
       }
     }, 45000);
   }

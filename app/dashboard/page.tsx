@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { RefreshCw, Clock, CheckCircle, AlertCircle, Play } from 'lucide-react'
+import { RefreshCw, Clock, CheckCircle, AlertCircle, Play, User, LogOut } from 'lucide-react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 interface QueueItem {
   id: string
@@ -33,13 +34,29 @@ export default function DashboardPage() {
     error: 0
   })
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const supabase = createClientComponentClient()
 
   useEffect(() => {
+    // Check authentication status
+    checkAuth()
     loadQueue()
     // Poll for updates every 3 seconds
     const interval = setInterval(loadQueue, 3000)
     return () => clearInterval(interval)
   }, [])
+
+  const checkAuth = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+    } catch (error) {
+      console.error('Auth check error:', error)
+    } finally {
+      setAuthLoading(false)
+    }
+  }
 
   const loadQueue = async () => {
     try {
@@ -63,6 +80,17 @@ export default function DashboardPage() {
       await loadQueue()
     } catch (error) {
       console.error('Failed to clear queue:', error)
+    }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+      setUser(null)
+      // Redirect to home or login page
+      window.location.href = '/auth/signup'
+    } catch (error) {
+      console.error('Sign out error:', error)
     }
   }
 
@@ -109,7 +137,7 @@ export default function DashboardPage() {
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Dashboard</h1>
             <p className="text-gray-600">Manage your UI element processing queue</p>
           </div>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-4">
             <Button onClick={loadQueue} variant="outline">
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
@@ -117,6 +145,52 @@ export default function DashboardPage() {
             <Button onClick={clearQueue} variant="destructive">
               Clear Queue
             </Button>
+            
+            {/* User Profile */}
+            {authLoading ? (
+              <div className="w-10 h-10 rounded-full bg-gray-200 animate-pulse" />
+            ) : user ? (
+              <div className="flex items-center gap-3 bg-white rounded-lg border border-gray-200 px-3 py-2">
+                <img 
+                  src={user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.user_metadata?.name || user.email)}&size=32&background=3B82F6&color=fff`}
+                  alt="User avatar"
+                  className="w-8 h-8 rounded-full border-2 border-gray-300"
+                />
+                <div className="hidden sm:block">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {user.user_metadata?.name || user.email?.split('@')[0]}
+                  </div>
+                  <div className="text-xs text-green-600">✅ Signed in</div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="text-gray-500 hover:text-gray-700"
+                  title="Sign out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                  <User className="w-4 h-4 text-orange-600" />
+                </div>
+                <div className="hidden sm:block">
+                  <div className="text-sm font-semibold text-gray-900">Not signed in</div>
+                  <div className="text-xs text-orange-600">Limited access</div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.location.href = '/auth/signup'}
+                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                >
+                  Sign In
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 

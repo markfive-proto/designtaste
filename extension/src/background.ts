@@ -80,6 +80,10 @@ class BackgroundQueue {
             .then(result => sendResponse(result))
             .catch(error => sendResponse({ authenticated: false, error: error.message }));
           return true; // Keep message channel open for async response
+        case 'OPEN_TAB':
+          chrome.tabs.create({ url: message.url });
+          sendResponse({ success: true });
+          break;
       }
     });
 
