@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { RefreshCw, Clock, CheckCircle, AlertCircle, Play, User, LogOut } from 'lucide-react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import ElementDetailsModal from '@/components/ElementDetailsModal'
 
 interface QueueItem {
   id: string
@@ -37,6 +38,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const supabase = createClientComponentClient()
 
   useEffect(() => {
@@ -139,6 +142,16 @@ export default function DashboardPage() {
       case 'div': return '📦'
       default: return '📦'
     }
+  }
+
+  const handleViewDetails = (elementId: string) => {
+    setSelectedElementId(elementId)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedElementId(null)
   }
 
   return (
@@ -327,7 +340,12 @@ export default function DashboardPage() {
                         }`}>
                           {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
                         </span>
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleViewDetails(item.id)}
+                          disabled={item.status === 'queued' || item.status === 'processing'}
+                        >
                           View Details
                         </Button>
                       </div>
@@ -377,6 +395,15 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Element Details Modal */}
+      {selectedElementId && (
+        <ElementDetailsModal
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          elementId={selectedElementId}
+        />
+      )}
     </div>
   )
 }
