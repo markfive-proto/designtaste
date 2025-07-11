@@ -18,12 +18,16 @@ export async function GET(request: NextRequest) {
     // This allows testing without setting up the database first
     
     try {
-      // Get all elements in the processing queue (simple query without relations)
+      // Get all elements in the processing queue with related data
       console.log('Fetching queue items from database...');
       
       const { data: queueItems, error } = await supabase
         .from('processing_queue')
-        .select('*')
+        .select(`
+          *,
+          element_analyses(*),
+          inspirations(*)
+        `)
         .order('created_at', { ascending: false })
 
       console.log('Database query result:', { 
@@ -46,7 +50,7 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      // Transform data for frontend (without relations for now)
+      // Transform data for frontend with all related data included
       const transformedQueue = queueItems?.map(item => ({
         id: item.id,
         url: item.source_url,
@@ -54,8 +58,24 @@ export async function GET(request: NextRequest) {
         status: item.status,
         priority: item.priority,
         timestamp: new Date(item.created_at).getTime(),
-        analysis: null, // Will be populated when relations are set up
-        inspirations: [], // Will be populated when relations are set up
+        analysis: item.element_analyses?.[0] ? {
+          componentType: item.element_analyses[0].component_type,
+          designIssues: item.element_analyses[0].design_issues,
+          styleCharacteristics: item.element_analyses[0].style_characteristics,
+          recommendations: item.element_analyses[0].recommendations,
+          confidenceScore: item.element_analyses[0].confidence_score,
+          createdAt: item.element_analyses[0].created_at
+        } : null,
+        inspirations: item.inspirations ? item.inspirations.map((inspiration: any) => ({
+          id: inspiration.id,
+          title: inspiration.title,
+          imageUrl: inspiration.image_url,
+          source: inspiration.source,
+          category: inspiration.category,
+          tags: inspiration.tags,
+          similarityScore: inspiration.similarity_score,
+          createdAt: inspiration.created_at
+        })) : [],
         processedAt: item.processed_at ? new Date(item.processed_at).getTime() : null,
         errorMessage: item.error_message || null
       })) || []

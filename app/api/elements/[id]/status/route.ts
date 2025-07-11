@@ -8,7 +8,7 @@ export async function GET(
   try {
     const elementId = params.id
 
-    // Get element status (simple query without relations)
+    // Get element status
     const { data: element, error } = await supabase
       .from('processing_queue')
       .select('*')
@@ -30,6 +30,25 @@ export async function GET(
       )
     }
 
+    // Get analysis status
+    const { data: analysis } = await supabase
+      .from('element_analyses')
+      .select('id, created_at')
+      .eq('element_id', elementId)
+      .single()
+
+    // Get inspirations status
+    const { data: inspirations } = await supabase
+      .from('inspirations')
+      .select('id')
+      .eq('element_id', elementId)
+
+    // Calculate progress and current step
+    const progress = calculateProgress(element.status, !!analysis, inspirations?.length || 0)
+    const currentStep = getCurrentStep(element.status, !!analysis, inspirations?.length || 0)
+    const aiProvider = getAIProviderForStep(!!analysis, inspirations?.length || 0)
+    const steps = getProcessingSteps(element.status, !!analysis, inspirations?.length || 0)
+
     // Transform data for frontend
     const transformedElement = {
       id: element.id,
@@ -40,9 +59,13 @@ export async function GET(
       timestamp: new Date(element.created_at).getTime(),
       processedAt: element.processed_at ? new Date(element.processed_at).getTime() : null,
       errorMessage: element.error_message || null,
-      analysis: element.element_analyses?.[0] || null,
-      inspirations: element.inspirations || [],
-      generatedCode: element.generated_code || []
+      progress,
+      currentStep,
+      aiProvider,
+      steps, // <-- new
+      analysis: !!analysis,
+      inspirationsCount: inspirations?.length || 0,
+      isProcessing: element.status === 'processing'
     }
 
     return NextResponse.json(transformedElement)
@@ -54,6 +77,82 @@ export async function GET(
       { status: 500 }
     )
   }
+}
+
+function calculateProgress(status: string, hasAnalysis: boolean, inspirationsCount: number): number {
+  if (status === 'error') return 0
+  if (status === 'completed') return 100
+  
+  let progress = 0
+  
+  // Base progress for being in queue
+  if (status === 'processing') progress += 15
+  
+  // Analysis completion
+  if (hasAnalysis) progress += 35
+  
+  // Inspirations completion
+  if (inspirationsCount > 0) progress += 35
+  
+  // Final completion
+  if (status === 'completed') progress += 15
+  
+  return Math.min(progress, status === 'completed' ? 100 : 95)
+}
+
+function getProcessingSteps(status: string, hasAnalysis: boolean, inspirationsCount: number) {
+  // Each step: label, completed
+  return [
+    {
+      label: 'Analyzing image',
+      completed: status === 'completed' || status === 'processing' && hasAnalysis || status === 'error',
+    },
+    {
+      label: 'Suggesting tips',
+      completed: status === 'completed' || status === 'processing' && hasAnalysis || status === 'error',
+    },
+    {
+      label: 'Finding inspiration',
+      completed: status === 'completed' || inspirationsCount > 0 || status === 'error',
+    },
+    {
+      label: 'Generating code',
+      completed: status === 'completed' || status === 'error',
+    },
+  ]
+}
+
+function getCurrentStep(status: string, hasAnalysis: boolean, inspirationsCount: number): string {
+  if (status === 'error') return 'Error occurred during processing'
+  if (status === 'completed') return 'Processing completed successfully'
+
+  if (!hasAnalysis) {
+    return 'Analyzing image...'
+  }
+
+  // If analysis is done but no inspirations
+  if (hasAnalysis && inspirationsCount === 0) {
+    return 'Finding inspiration...'
+  }
+
+  // If inspirations found but not completed
+  if (hasAnalysis && inspirationsCount > 0 && status !== 'completed') {
+    return 'Generating code...'
+  }
+
+  return 'Finalizing results...'
+}
+
+function getAIProviderForStep(hasAnalysis: boolean, inspirationsCount: number): string {
+  if (!hasAnalysis) {
+    return 'Mistral AI'
+  }
+  
+  if (inspirationsCount === 0) {
+    return 'Design Sources'
+  }
+  
+  return 'Processing'
 }
 
 export async function PATCH(

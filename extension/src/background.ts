@@ -27,8 +27,15 @@ class BackgroundQueue {
   private webAppUrl = 'http://localhost:3000'; // Next.js app URL
 
   constructor() {
-    this.loadQueue();
-    this.setupListeners();
+    try {
+      console.log('BackgroundQueue: Starting initialization...');
+      this.loadQueue();
+      this.setupListeners();
+      console.log('BackgroundQueue: Initialization completed');
+    } catch (error) {
+      console.error('BackgroundQueue: Initialization failed:', error);
+      throw error;
+    }
   }
 
   private async loadQueue() {
@@ -68,9 +75,10 @@ class BackgroundQueue {
             .catch(error => sendResponse({ success: false, error: error.message }));
           return true; // Keep message channel open for async response
         case 'FIND_INSPIRATION':
-          this.handleFindInspiration(message.elementData, message.prompt, sender.tab!, message.elementScreenshot);
-          sendResponse({ success: true });
-          break;
+          this.handleFindInspiration(message.elementData, message.prompt, sender.tab!, message.elementScreenshot, message.elementId)
+            .then(result => sendResponse(result))
+            .catch(error => sendResponse({ success: false, error: error.message }));
+          return true; // Keep message channel open for async response
         case 'GET_QUEUE_STATUS':
           sendResponse({ queue: this.queue });
           break;
@@ -123,11 +131,15 @@ class BackgroundQueue {
     }
   }
 
-  private async addToQueue(elementData: any, tab: chrome.tabs.Tab) {
+  private async addToQueue(elementData: any, tab: chrome.tabs.Tab, elementId?: string) {
+    // Use provided ID or generate one
+    const id = elementId || `element_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Get full page screenshot for context (optional)
     const screenshot = await this.captureScreenshot(tab.id!);
     
     const queueItem: QueuedElement = {
-      id: `element_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id,
       url: tab.url || '',
       elementData,
       screenshot,
@@ -140,12 +152,14 @@ class BackgroundQueue {
     await this.saveQueue();
     
     // Show notification
-    this.showNotification(`Element added to queue. ${this.queue.length} total.`);
+    this.showNotification(`Element processing started. View details page for progress.`);
     
-    // Start processing if not already running
+    // Start processing immediately (non-blocking)
     if (!this.processing) {
       this.processQueue();
     }
+    
+    return id;
   }
 
   private async processNow(elementData: any, tab: chrome.tabs.Tab) {
@@ -310,32 +324,45 @@ class BackgroundQueue {
     };
   }
 
-  private async handleFindInspiration(elementData: any, prompt: string, tab: chrome.tabs.Tab, elementScreenshot?: string) {
-    const fullPageScreenshot = await this.captureScreenshot(tab.id!);
-    
-    const queueItem: QueuedElement = {
-      id: `inspiration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      url: tab.url || '',
-      elementData: {
-        ...elementData,
-        userPrompt: prompt,
-        requestType: 'inspiration',
-        elementScreenshot: elementScreenshot || null // Store element-specific screenshot
-      },
-      screenshot: fullPageScreenshot, // Keep full page screenshot for context
-      status: 'queued',
-      priority: 2, // Higher priority for inspiration requests
-      timestamp: Date.now()
-    };
+  private async handleFindInspiration(elementData: any, prompt: string, tab: chrome.tabs.Tab, elementScreenshot?: string, elementId?: string) {
+    try {
+      // Use provided element ID or generate one
+      const id = elementId || `inspiration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Send to API immediately for processing
+      const response = await fetch('http://localhost:3000/api/elements/process', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id,
+          elementData: {
+            ...elementData,
+            userPrompt: prompt,
+            requestType: 'inspiration',
+            elementScreenshot: elementScreenshot || null
+          },
+          screenshot: elementScreenshot || '', // Use element screenshot as primary
+          url: tab.url || ''
+        }),
+      });
 
-    this.queue.push(queueItem);
-    await this.saveQueue();
-    
-    this.showNotification(`Added "${prompt}" to inspiration queue`);
-    
-    // Start processing if not already running
-    if (!this.processing) {
-      this.processQueue();
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        this.showNotification(`Processing "${prompt}" - check details page for progress`);
+        return { success: true, elementId: id };
+      } else {
+        throw new Error(result.error || 'Failed to process element');
+      }
+    } catch (error) {
+      console.error('Background: Find inspiration failed:', error);
+      throw error;
     }
   }
 
@@ -383,5 +410,11 @@ class BackgroundQueue {
   }
 }
 
-// Initialize background queue manager
-new BackgroundQueue();
+// Initialize background queue manager with error handling
+try {
+  console.log('Background script: Initializing BackgroundQueue...');
+  const backgroundQueue = new BackgroundQueue();
+  console.log('Background script: BackgroundQueue initialized successfully');
+} catch (error) {
+  console.error('Background script: Failed to initialize BackgroundQueue:', error);
+}

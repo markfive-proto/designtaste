@@ -338,56 +338,112 @@ class PopupManager {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       console.log('Popup: Active tab', tab);
       
-      if (tab.id) {
-        console.log('Popup: Sending message to tab', tab.id);
-        
-        try {
-          const response = await chrome.tabs.sendMessage(tab.id, { type: 'ACTIVATE_SELECTOR' });
-          console.log('Popup: Response from content script', response);
-          
-          if (response && response.success) {
-            console.log('Popup: Successfully activated selector');
-            window.close();
-          } else {
-            console.error('Popup: Content script did not respond properly');
-            alert('Content script not ready. Please refresh the page and try again.');
-          }
-        } catch (messageError) {
-          console.error('Popup: Message sending failed:', messageError);
-          
-          // Try to inject content script manually
-          try {
-            console.log('Popup: Attempting to inject content script manually');
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['content.js']
-            });
-            
-            // Wait a bit then try again
-            setTimeout(async () => {
-              try {
-                const retryResponse = await chrome.tabs.sendMessage(tab.id!, { type: 'ACTIVATE_SELECTOR' });
-                if (retryResponse && retryResponse.success) {
-                  console.log('Popup: Successfully activated after manual injection');
-                  window.close();
-                } else {
-                  alert('Could not activate selector. Please refresh the page and try again.');
-                }
-              } catch (retryError) {
-                console.error('Popup: Retry failed:', retryError);
-                alert('Could not activate selector. Please refresh the page and try again.');
-              }
-            }, 500);
-            
-          } catch (injectError) {
-            console.error('Popup: Manual injection failed:', injectError);
-            alert('Could not communicate with page. Please refresh and try again.');
-          }
-        }
+      if (!tab.id) {
+        alert('No active tab found.');
+        return;
       }
+      
+      // Check if tab URL is valid for injection
+      if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('moz-extension://'))) {
+        alert('Cannot activate selector on this page. Please navigate to a regular website.');
+        return;
+      }
+      
+      console.log('Popup: Checking if content script is ready');
+      
+      // First, try to ping the content script to see if it's ready
+      const isReady = await this.testContentScriptReady(tab.id);
+      
+      if (isReady) {
+        console.log('Popup: Content script is ready, activating selector');
+        await this.sendActivateMessage(tab.id);
+      } else {
+        console.log('Popup: Content script not ready, injecting...');
+        await this.injectAndActivate(tab.id);
+      }
+      
     } catch (error) {
       console.error('Popup: Failed to activate selector:', error);
       alert('Failed to activate selector. Please refresh the page and try again.');
+    }
+  }
+
+  private async testContentScriptReady(tabId: number): Promise<boolean> {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+      return response && response.success && response.ready;
+    } catch (error) {
+      console.log('Popup: Content script not ready:', error);
+      return false;
+    }
+  }
+
+  private async sendActivateMessage(tabId: number): Promise<void> {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'ACTIVATE_SELECTOR' });
+      
+      if (response && response.success) {
+        console.log('Popup: Successfully activated selector');
+        window.close();
+      } else {
+        console.error('Popup: Content script did not respond properly');
+        alert('Could not activate selector. Please refresh the page and try again.');
+      }
+    } catch (error) {
+      console.error('Popup: Failed to send activate message:', error);
+      alert('Communication failed. Please refresh the page and try again.');
+    }
+  }
+
+  private async injectAndActivate(tabId: number): Promise<void> {
+    try {
+      console.log('Popup: Injecting content script');
+      
+      // Inject CSS first
+      await chrome.scripting.insertCSS({
+        target: { tabId },
+        files: ['content.css']
+      });
+      
+      // Then inject the script
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      });
+      
+      console.log('Popup: Content script and CSS injected, waiting for initialization');
+      
+      // Wait for content script to initialize with retries
+      let retries = 5;
+      let isReady = false;
+      
+      while (retries > 0 && !isReady) {
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms between retries
+        
+        try {
+          const pingResponse = await chrome.tabs.sendMessage(tabId, { type: 'PING' });
+          if (pingResponse && pingResponse.success && pingResponse.ready) {
+            isReady = true;
+            break;
+          }
+        } catch (error) {
+          console.log(`Popup: Ping retry ${6 - retries} failed:`, error);
+        }
+        
+        retries--;
+      }
+      
+      if (isReady) {
+        console.log('Popup: Content script ready after injection, activating selector');
+        await this.sendActivateMessage(tabId);
+      } else {
+        console.error('Popup: Content script not ready after injection and retries');
+        alert('Could not initialize selector. Please refresh the page and try again.');
+      }
+      
+    } catch (injectError) {
+      console.error('Popup: Manual injection failed:', injectError);
+      alert('Could not inject content script. Please refresh the page and try again.');
     }
   }
 

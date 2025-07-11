@@ -198,18 +198,18 @@ Format your response as:
 function parseCodeGenerationResponse(response: string) {
   const sections = {
     description: '',
-    improvements: [],
+    improvements: [] as string[],
     code: ''
   }
 
   // Extract description
-  const descMatch = response.match(/## Description\s*\n(.*?)(?=\n##|$)/s)
+  const descMatch = response.match(/## Description\s*\n([\s\S]*?)(?=\n##|$)/)
   if (descMatch) {
     sections.description = descMatch[1].trim()
   }
 
   // Extract improvements
-  const improvMatch = response.match(/## Improvements\s*\n(.*?)(?=\n##|$)/s)
+  const improvMatch = response.match(/## Improvements\s*\n([\s\S]*?)(?=\n##|$)/)
   if (improvMatch) {
     sections.improvements = improvMatch[1]
       .split('\n')
@@ -218,7 +218,7 @@ function parseCodeGenerationResponse(response: string) {
   }
 
   // Extract code
-  const codeMatch = response.match(/```(?:typescript|tsx|jsx)?\s*\n(.*?)\n```/s)
+  const codeMatch = response.match(/```(?:typescript|tsx|jsx)?\s*\n([\s\S]*?)\n```/)
   if (codeMatch) {
     sections.code = codeMatch[1].trim()
   }
