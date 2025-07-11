@@ -5,7 +5,8 @@
       "Bash(npm install)",
       "Bash(npm run build:*)",
       "Bash(cp:*)",
-      "Bash(zip:*)"
+      "Bash(zip:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }

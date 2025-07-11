@@ -13,11 +13,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Store the element in the processing queue
+    // For development, bypass RLS by using service role or create a temporary user
+    // In production, you'd authenticate the user first
     const { data, error } = await supabase
       .from('processing_queue')
       .insert({
         id,
+        user_id: null, // Temporarily allow null for development
         element_data: elementData,
         screenshot_url: screenshot,
         source_url: url,

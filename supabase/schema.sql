@@ -1,262 +1,263 @@
--- DesignTaste Database Schema
--- Run this in your Supabase SQL Editor
+-- Supabase Database Schema for Vibe UI Assistant
+-- This file contains all the table definitions and relationships
 
--- Create enums
+-- Enable necessary extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create enum types
 CREATE TYPE element_status AS ENUM ('queued', 'processing', 'completed', 'error');
 CREATE TYPE component_type AS ENUM ('hero', 'card', 'form', 'navigation', 'button', 'layout', 'footer', 'sidebar');
 CREATE TYPE framework_type AS ENUM ('tailwind', 'nextjs', 'react');
 
--- 1. user_profiles table - Extends Supabase auth
-CREATE TABLE user_profiles (
-    id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    full_name TEXT,
-    avatar_url TEXT,
-    preferences JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Users table (extends Supabase auth.users)
+CREATE TABLE IF NOT EXISTS public.user_profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  email TEXT NOT NULL,
+  name TEXT,
+  avatar_url TEXT,
+  preferences JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. projects table - For organizing multiple elements
-CREATE TABLE projects (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Processing queue table - stores elements being processed
+CREATE TABLE IF NOT EXISTS public.processing_queue (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  element_data JSONB NOT NULL,
+  screenshot_url TEXT,
+  source_url TEXT NOT NULL,
+  status element_status DEFAULT 'queued',
+  priority INTEGER DEFAULT 1,
+  error_message TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  processed_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. processing_queue table - Main table for elements being processed
-CREATE TABLE processing_queue (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE NOT NULL,
-    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
-    element_name TEXT,
-    screenshot_url TEXT,
-    dom_data JSONB,
-    bounding_box JSONB,
-    status element_status DEFAULT 'queued',
-    priority INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Element analyses table - stores AI analysis results
+CREATE TABLE IF NOT EXISTS public.element_analyses (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  element_id TEXT REFERENCES public.processing_queue(id) ON DELETE CASCADE,
+  component_type component_type,
+  design_issues TEXT[],
+  style_characteristics TEXT[],
+  recommendations TEXT[],
+  confidence_score DECIMAL(3,2) DEFAULT 0.0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 4. element_analyses table - AI analysis results
-CREATE TABLE element_analyses (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    queue_item_id UUID REFERENCES processing_queue(id) ON DELETE CASCADE NOT NULL,
-    component_type component_type,
-    analysis_data JSONB,
-    confidence_score DECIMAL(3,2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Inspirations table - stores design inspiration results
+CREATE TABLE IF NOT EXISTS public.inspirations (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  element_id TEXT REFERENCES public.processing_queue(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  source TEXT,
+  category component_type,
+  tags TEXT[],
+  similarity_score DECIMAL(3,2) DEFAULT 0.0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 5. inspirations table - Design inspiration results
-CREATE TABLE inspirations (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    queue_item_id UUID REFERENCES processing_queue(id) ON DELETE CASCADE NOT NULL,
-    inspiration_url TEXT,
-    title TEXT,
-    description TEXT,
-    tags TEXT[],
-    similarity_score DECIMAL(3,2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Generated code table - stores AI-generated code improvements
+CREATE TABLE IF NOT EXISTS public.generated_code (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  element_id TEXT REFERENCES public.processing_queue(id) ON DELETE CASCADE,
+  framework framework_type NOT NULL,
+  code TEXT NOT NULL,
+  description TEXT,
+  improvements TEXT[],
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+  user_feedback TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 6. generated_code table - AI-generated code improvements
-CREATE TABLE generated_code (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    queue_item_id UUID REFERENCES processing_queue(id) ON DELETE CASCADE NOT NULL,
-    framework framework_type NOT NULL,
-    code_content TEXT NOT NULL,
-    explanation TEXT,
-    improvement_score DECIMAL(3,2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- User feedback table - stores user ratings and feedback
+CREATE TABLE IF NOT EXISTS public.user_feedback (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  element_id TEXT REFERENCES public.processing_queue(id) ON DELETE CASCADE,
+  generated_code_id UUID REFERENCES public.generated_code(id) ON DELETE CASCADE,
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+  feedback_text TEXT,
+  helpful BOOLEAN,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 7. user_feedback table - User ratings and feedback
-CREATE TABLE user_feedback (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID REFERENCES user_profiles(id) ON DELETE CASCADE NOT NULL,
-    queue_item_id UUID REFERENCES processing_queue(id) ON DELETE CASCADE NOT NULL,
-    rating INTEGER CHECK (rating >= 1 AND rating <= 5),
-    feedback_text TEXT,
-    helpful BOOLEAN,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Projects table - for organizing multiple elements
+CREATE TABLE IF NOT EXISTS public.projects (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 8. project_elements table - Junction table for project organization
-CREATE TABLE project_elements (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    project_id UUID REFERENCES projects(id) ON DELETE CASCADE NOT NULL,
-    queue_item_id UUID REFERENCES processing_queue(id) ON DELETE CASCADE NOT NULL,
-    order_index INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(project_id, queue_item_id)
+-- Project elements junction table
+CREATE TABLE IF NOT EXISTS public.project_elements (
+  project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+  element_id TEXT REFERENCES public.processing_queue(id) ON DELETE CASCADE,
+  added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  PRIMARY KEY (project_id, element_id)
 );
 
--- Create indexes for performance
-CREATE INDEX idx_processing_queue_user_id ON processing_queue(user_id);
-CREATE INDEX idx_processing_queue_status ON processing_queue(status);
-CREATE INDEX idx_processing_queue_created_at ON processing_queue(created_at);
-CREATE INDEX idx_element_analyses_queue_item_id ON element_analyses(queue_item_id);
-CREATE INDEX idx_inspirations_queue_item_id ON inspirations(queue_item_id);
-CREATE INDEX idx_generated_code_queue_item_id ON generated_code(queue_item_id);
-CREATE INDEX idx_user_feedback_user_id ON user_feedback(user_id);
-CREATE INDEX idx_user_feedback_queue_item_id ON user_feedback(queue_item_id);
-CREATE INDEX idx_projects_user_id ON projects(user_id);
-CREATE INDEX idx_project_elements_project_id ON project_elements(project_id);
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_processing_queue_user_id ON public.processing_queue(user_id);
+CREATE INDEX IF NOT EXISTS idx_processing_queue_status ON public.processing_queue(status);
+CREATE INDEX IF NOT EXISTS idx_processing_queue_created_at ON public.processing_queue(created_at);
+CREATE INDEX IF NOT EXISTS idx_element_analyses_element_id ON public.element_analyses(element_id);
+CREATE INDEX IF NOT EXISTS idx_inspirations_element_id ON public.inspirations(element_id);
+CREATE INDEX IF NOT EXISTS idx_generated_code_element_id ON public.generated_code(element_id);
+CREATE INDEX IF NOT EXISTS idx_user_feedback_user_id ON public.user_feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
 
 -- Create updated_at trigger function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
+  NEW.updated_at = NOW();
+  RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
--- Apply updated_at triggers
-CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_processing_queue_updated_at BEFORE UPDATE ON processing_queue FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Add updated_at triggers
+CREATE TRIGGER handle_user_profiles_updated_at
+  BEFORE UPDATE ON public.user_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- Create user profile trigger on auth.users insert
-CREATE OR REPLACE FUNCTION handle_new_user()
+CREATE TRIGGER handle_processing_queue_updated_at
+  BEFORE UPDATE ON public.processing_queue
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER handle_projects_updated_at
+  BEFORE UPDATE ON public.projects
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Row Level Security (RLS) policies
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.processing_queue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.element_analyses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inspirations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.generated_code ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_elements ENABLE ROW LEVEL SECURITY;
+
+-- User profiles policies
+CREATE POLICY "Users can view their own profile" ON public.user_profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update their own profile" ON public.user_profiles
+  FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can insert their own profile" ON public.user_profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Processing queue policies
+CREATE POLICY "Users can view their own queue items" ON public.processing_queue
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own queue items" ON public.processing_queue
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own queue items" ON public.processing_queue
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own queue items" ON public.processing_queue
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Element analyses policies
+CREATE POLICY "Users can view analyses for their elements" ON public.element_analyses
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.processing_queue pq 
+      WHERE pq.id = element_analyses.element_id 
+      AND pq.user_id = auth.uid()
+    )
+  );
+
+-- Inspirations policies
+CREATE POLICY "Users can view inspirations for their elements" ON public.inspirations
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.processing_queue pq 
+      WHERE pq.id = inspirations.element_id 
+      AND pq.user_id = auth.uid()
+    )
+  );
+
+-- Generated code policies
+CREATE POLICY "Users can view code for their elements" ON public.generated_code
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.processing_queue pq 
+      WHERE pq.id = generated_code.element_id 
+      AND pq.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can insert code for their elements" ON public.generated_code
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.processing_queue pq 
+      WHERE pq.id = generated_code.element_id 
+      AND pq.user_id = auth.uid()
+    )
+  );
+
+-- User feedback policies
+CREATE POLICY "Users can manage their own feedback" ON public.user_feedback
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Projects policies
+CREATE POLICY "Users can manage their own projects" ON public.projects
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Project elements policies
+CREATE POLICY "Users can manage their project elements" ON public.project_elements
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM public.projects p 
+      WHERE p.id = project_elements.project_id 
+      AND p.user_id = auth.uid()
+    )
+  );
+
+-- Create a function to automatically create user profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO user_profiles (id, email, full_name)
-    VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
-    RETURN NEW;
+  INSERT INTO public.user_profiles (id, email, name)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'name');
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Trigger to create profile on user signup
 CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Row Level Security (RLS) Policies
-
--- Enable RLS on all tables
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE processing_queue ENABLE ROW LEVEL SECURITY;
-ALTER TABLE element_analyses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE inspirations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE generated_code ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_feedback ENABLE ROW LEVEL SECURITY;
-ALTER TABLE project_elements ENABLE ROW LEVEL SECURITY;
-
--- user_profiles policies
-CREATE POLICY "Users can view own profile" ON user_profiles FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON user_profiles FOR UPDATE USING (auth.uid() = id);
-
--- projects policies
-CREATE POLICY "Users can view own projects" ON projects FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own projects" ON projects FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own projects" ON projects FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own projects" ON projects FOR DELETE USING (auth.uid() = user_id);
-
--- processing_queue policies
-CREATE POLICY "Users can view own queue items" ON processing_queue FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own queue items" ON processing_queue FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own queue items" ON processing_queue FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own queue items" ON processing_queue FOR DELETE USING (auth.uid() = user_id);
-
--- element_analyses policies (via queue_item_id)
-CREATE POLICY "Users can view own analyses" ON element_analyses FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM processing_queue 
-        WHERE processing_queue.id = element_analyses.queue_item_id 
-        AND processing_queue.user_id = auth.uid()
-    )
-);
-CREATE POLICY "Users can insert own analyses" ON element_analyses FOR INSERT WITH CHECK (
-    EXISTS (
-        SELECT 1 FROM processing_queue 
-        WHERE processing_queue.id = element_analyses.queue_item_id 
-        AND processing_queue.user_id = auth.uid()
-    )
-);
-
--- inspirations policies (via queue_item_id)
-CREATE POLICY "Users can view own inspirations" ON inspirations FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM processing_queue 
-        WHERE processing_queue.id = inspirations.queue_item_id 
-        AND processing_queue.user_id = auth.uid()
-    )
-);
-CREATE POLICY "Users can insert own inspirations" ON inspirations FOR INSERT WITH CHECK (
-    EXISTS (
-        SELECT 1 FROM processing_queue 
-        WHERE processing_queue.id = inspirations.queue_item_id 
-        AND processing_queue.user_id = auth.uid()
-    )
-);
-
--- generated_code policies (via queue_item_id)
-CREATE POLICY "Users can view own generated code" ON generated_code FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM processing_queue 
-        WHERE processing_queue.id = generated_code.queue_item_id 
-        AND processing_queue.user_id = auth.uid()
-    )
-);
-CREATE POLICY "Users can insert own generated code" ON generated_code FOR INSERT WITH CHECK (
-    EXISTS (
-        SELECT 1 FROM processing_queue 
-        WHERE processing_queue.id = generated_code.queue_item_id 
-        AND processing_queue.user_id = auth.uid()
-    )
-);
-
--- user_feedback policies
-CREATE POLICY "Users can view own feedback" ON user_feedback FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own feedback" ON user_feedback FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own feedback" ON user_feedback FOR UPDATE USING (auth.uid() = user_id);
-
--- project_elements policies (via project_id)
-CREATE POLICY "Users can view own project elements" ON project_elements FOR SELECT USING (
-    EXISTS (
-        SELECT 1 FROM projects 
-        WHERE projects.id = project_elements.project_id 
-        AND projects.user_id = auth.uid()
-    )
-);
-CREATE POLICY "Users can insert own project elements" ON project_elements FOR INSERT WITH CHECK (
-    EXISTS (
-        SELECT 1 FROM projects 
-        WHERE projects.id = project_elements.project_id 
-        AND projects.user_id = auth.uid()
-    )
-);
-CREATE POLICY "Users can update own project elements" ON project_elements FOR UPDATE USING (
-    EXISTS (
-        SELECT 1 FROM projects 
-        WHERE projects.id = project_elements.project_id 
-        AND projects.user_id = auth.uid()
-    )
-);
-CREATE POLICY "Users can delete own project elements" ON project_elements FOR DELETE USING (
-    EXISTS (
-        SELECT 1 FROM projects 
-        WHERE projects.id = project_elements.project_id 
-        AND projects.user_id = auth.uid()
-    )
-);
-
--- Insert some sample data for testing
-INSERT INTO user_profiles (id, email, full_name) 
-VALUES ('00000000-0000-0000-0000-000000000000', 'test@example.com', 'Test User')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO projects (id, user_id, name, description) 
-VALUES (
-    '11111111-1111-1111-1111-111111111111',
-    '00000000-0000-0000-0000-000000000000',
-    'Sample Project',
-    'A sample project for testing'
-) ON CONFLICT (id) DO NOTHING;
+-- Create a view for queue with related data (for easier querying)
+CREATE OR REPLACE VIEW public.queue_with_details AS
+SELECT 
+  pq.*,
+  ea.component_type,
+  ea.design_issues,
+  ea.recommendations,
+  COALESCE(insp_count.count, 0) as inspiration_count,
+  COALESCE(code_count.count, 0) as generated_code_count
+FROM public.processing_queue pq
+LEFT JOIN public.element_analyses ea ON pq.id = ea.element_id
+LEFT JOIN (
+  SELECT element_id, COUNT(*) as count 
+  FROM public.inspirations 
+  GROUP BY element_id
+) insp_count ON pq.id = insp_count.element_id
+LEFT JOIN (
+  SELECT element_id, COUNT(*) as count 
+  FROM public.generated_code 
+  GROUP BY element_id
+) code_count ON pq.id = code_count.element_id;

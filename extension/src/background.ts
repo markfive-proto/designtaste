@@ -75,6 +75,11 @@ class BackgroundQueue {
           this.clearQueue();
           sendResponse({ success: true });
           break;
+        case 'CHECK_AUTH':
+          this.checkAuthStatus()
+            .then(result => sendResponse(result))
+            .catch(error => sendResponse({ authenticated: false, error: error.message }));
+          return true; // Keep message channel open for async response
       }
     });
 
@@ -236,12 +241,27 @@ class BackgroundQueue {
     try {
       console.log('Background: Handling quick fix request:', prompt);
       
+      // Check usage count and prompt for auth if needed
+      const usageCheck = await this.checkQuickFixUsage();
+      if (!usageCheck.allowed) {
+        return {
+          success: false,
+          error: 'auth_required',
+          message: 'Sign up with Google to continue using Quick Fix suggestions',
+          usageCount: usageCheck.count
+        };
+      }
+      
+      // Increment usage count
+      await this.incrementQuickFixUsage();
+      
       // Analyze intent and generate quick fix
       const suggestion = await this.generateQuickFix(elementData, prompt);
       
       return {
         success: true,
-        suggestion
+        suggestion,
+        usageCount: usageCheck.count + 1
       };
     } catch (error) {
       console.error('Background: Quick fix failed:', error);
@@ -250,6 +270,31 @@ class BackgroundQueue {
         error: 'Failed to generate suggestion'
       };
     }
+  }
+  
+  private async checkQuickFixUsage(): Promise<{ allowed: boolean; count: number }> {
+    const result = await chrome.storage.local.get(['quickFixUsageCount', 'userAuthenticated']);
+    const count = result.quickFixUsageCount || 0;
+    const isAuthenticated = result.userAuthenticated || false;
+    
+    // Allow unlimited usage if authenticated, otherwise limit to 1 free try
+    const allowed = isAuthenticated || count < 1;
+    
+    return { allowed, count };
+  }
+  
+  private async incrementQuickFixUsage() {
+    const result = await chrome.storage.local.get(['quickFixUsageCount']);
+    const count = (result.quickFixUsageCount || 0) + 1;
+    await chrome.storage.local.set({ quickFixUsageCount: count });
+  }
+  
+  private async checkAuthStatus(): Promise<{ authenticated: boolean; user?: any }> {
+    const result = await chrome.storage.local.get(['userAuthenticated', 'userProfile']);
+    return {
+      authenticated: result.userAuthenticated || false,
+      user: result.userProfile || null
+    };
   }
 
   private async handleFindInspiration(elementData: any, prompt: string, tab: chrome.tabs.Tab) {

@@ -161,8 +161,35 @@ class PopupManager {
   }
 
   private getElementTitle(item: QueuedElement): string {
-    const tagName = item.elementData?.tagName || 'Element';
-    return this.formatTagName(tagName);
+    const elementData = item.elementData;
+    if (!elementData) return 'Element';
+    
+    // Try to get a more descriptive title
+    const tagName = elementData.tagName || 'Element';
+    const textContent = elementData.textContent?.slice(0, 30) || '';
+    const className = this.extractClassName(elementData.html);
+    
+    // Create a smart title based on available information
+    if (textContent.trim()) {
+      return `${this.formatTagName(tagName)}: ${textContent.trim()}`;
+    } else if (className) {
+      return `${this.formatTagName(tagName)} (${className})`;
+    } else {
+      return this.formatTagName(tagName);
+    }
+  }
+  
+  private extractClassName(html: string): string {
+    const match = html.match(/class=["']([^"']*?)["']/);
+    if (match && match[1]) {
+      // Get first meaningful class name (ignore utility classes)
+      const classes = match[1].split(' ').filter(cls => 
+        cls.length > 2 && !cls.startsWith('w-') && !cls.startsWith('h-') && 
+        !cls.startsWith('p-') && !cls.startsWith('m-') && !cls.startsWith('text-')
+      );
+      return classes[0] || match[1].split(' ')[0];
+    }
+    return '';
   }
 
   private formatTagName(tagName: string): string {
