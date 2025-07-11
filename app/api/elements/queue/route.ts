@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
+// Add CORS headers for extension requests
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: corsHeaders })
+}
+
 export async function GET(request: NextRequest) {
   try {
     // For development, return mock data if Supabase is not set up
@@ -58,7 +69,7 @@ export async function GET(request: NextRequest) {
           completed: transformedQueue.filter(item => item.status === 'completed').length,
           error: transformedQueue.filter(item => item.status === 'error').length
         }
-      })
+      }, { headers: corsHeaders })
     } catch (dbError) {
       console.log('Database not available, returning empty queue for development')
       return NextResponse.json({
@@ -70,14 +81,14 @@ export async function GET(request: NextRequest) {
           completed: 0,
           error: 0
         }
-      })
+      }, { headers: corsHeaders })
     }
 
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     )
   }
 }
@@ -101,13 +112,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Queue cleared successfully'
-    })
+    }, { headers: corsHeaders })
 
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     )
   }
 }

@@ -14,6 +14,7 @@ interface QueueItem {
   status: 'queued' | 'processing' | 'completed' | 'error'
   priority: number
   timestamp: number
+  errorMessage?: string
 }
 
 interface QueueStats {
@@ -120,6 +121,23 @@ export default function DashboardPage() {
       return urlObj.hostname + (urlObj.pathname !== '/' ? urlObj.pathname : '')
     } catch {
       return url
+    }
+  }
+
+  const getElementIcon = (tagName?: string) => {
+    switch (tagName?.toLowerCase()) {
+      case 'button': return '🔘'
+      case 'input': return '📝'
+      case 'img': return '🖼️'
+      case 'nav': return '🧭'
+      case 'header': return '📄'
+      case 'footer': return '📑'
+      case 'section': return '📋'
+      case 'article': return '📰'
+      case 'aside': return '📌'
+      case 'form': return '📋'
+      case 'div': return '📦'
+      default: return '📦'
     }
   }
 
@@ -264,6 +282,22 @@ export default function DashboardPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
+                        {/* Thumbnail */}
+                        {item.elementData?.elementScreenshot ? (
+                          <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border-2 border-gray-200 flex-shrink-0">
+                            <img 
+                              src={item.elementData.elementScreenshot} 
+                              alt="Element screenshot" 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 border-2 border-gray-200 flex items-center justify-center flex-shrink-0">
+                            <span className="text-2xl">
+                              {getElementIcon(item.elementData?.tagName)}
+                            </span>
+                          </div>
+                        )}
                         {getStatusIcon(item.status)}
                         <div>
                           <div className="font-semibold text-gray-900">
@@ -272,6 +306,16 @@ export default function DashboardPage() {
                           <div className="text-sm text-gray-600">
                             Added {new Date(item.timestamp).toLocaleString()}
                           </div>
+                          {item.elementData?.userPrompt && (
+                            <div className="text-sm text-gray-500 mt-1 max-w-md truncate">
+                              "{item.elementData.userPrompt}"
+                            </div>
+                          )}
+                          {item.status === 'error' && item.errorMessage && (
+                            <div className="text-sm text-red-600 mt-1 max-w-md truncate">
+                              Error: {item.errorMessage}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

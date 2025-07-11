@@ -6,7 +6,8 @@
       "Bash(npm run build:*)",
       "Bash(cp:*)",
       "Bash(zip:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }
