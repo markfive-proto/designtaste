@@ -11,6 +11,9 @@ interface QueuedElement {
     tagName: string;
     textContent: string;
     computedStyles: Record<string, string>;
+    elementScreenshot?: string;
+    userPrompt?: string;
+    requestType?: string;
   };
   screenshot: string;
   status: 'queued' | 'processing' | 'completed' | 'error';
@@ -65,7 +68,7 @@ class BackgroundQueue {
             .catch(error => sendResponse({ success: false, error: error.message }));
           return true; // Keep message channel open for async response
         case 'FIND_INSPIRATION':
-          this.handleFindInspiration(message.elementData, message.prompt, sender.tab!);
+          this.handleFindInspiration(message.elementData, message.prompt, sender.tab!, message.elementScreenshot);
           sendResponse({ success: true });
           break;
         case 'GET_QUEUE_STATUS':
@@ -84,6 +87,11 @@ class BackgroundQueue {
           chrome.tabs.create({ url: message.url });
           sendResponse({ success: true });
           break;
+        case 'CAPTURE_SCREENSHOT':
+          chrome.tabs.captureVisibleTab({ format: 'png', quality: 90 })
+            .then(screenshot => sendResponse(screenshot))
+            .catch(error => sendResponse(null));
+          return true; // Keep message channel open for async response
       }
     });
 
@@ -222,6 +230,7 @@ class BackgroundQueue {
         element.status = 'completed';
         this.showNotification(`✅ Analysis complete for ${element.elementData.tagName}`);
       } else {
+        console.error('API response error:', response.status, await response.text());
         throw new Error(`API request failed: ${response.status}`);
       }
     } catch (error) {
@@ -301,8 +310,8 @@ class BackgroundQueue {
     };
   }
 
-  private async handleFindInspiration(elementData: any, prompt: string, tab: chrome.tabs.Tab) {
-    const screenshot = await this.captureScreenshot(tab.id!);
+  private async handleFindInspiration(elementData: any, prompt: string, tab: chrome.tabs.Tab, elementScreenshot?: string) {
+    const fullPageScreenshot = await this.captureScreenshot(tab.id!);
     
     const queueItem: QueuedElement = {
       id: `inspiration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -310,9 +319,10 @@ class BackgroundQueue {
       elementData: {
         ...elementData,
         userPrompt: prompt,
-        requestType: 'inspiration'
+        requestType: 'inspiration',
+        elementScreenshot: elementScreenshot || null // Store element-specific screenshot
       },
-      screenshot,
+      screenshot: fullPageScreenshot, // Keep full page screenshot for context
       status: 'queued',
       priority: 2, // Higher priority for inspiration requests
       timestamp: Date.now()

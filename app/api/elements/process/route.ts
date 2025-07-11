@@ -13,13 +13,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For development, bypass RLS by using service role or create a temporary user
+    // For development, use a default user_id or allow null
     // In production, you'd authenticate the user first
+    console.log('Processing element:', { id, url, elementData: Object.keys(elementData) });
+    
     const { data, error } = await supabase
       .from('processing_queue')
       .insert({
         id,
-        user_id: null, // Temporarily allow null for development
+        user_id: null, // Allow null for development (handled by RLS policies)
         element_data: elementData,
         screenshot_url: screenshot,
         source_url: url,

@@ -10,6 +10,9 @@ interface QueuedElement {
     tagName: string;
     textContent: string;
     computedStyles: Record<string, string>;
+    elementScreenshot?: string;
+    userPrompt?: string;
+    requestType?: string;
   };
   status: 'queued' | 'processing' | 'completed' | 'error';
   priority: number;
@@ -106,9 +109,46 @@ class PopupManager {
           <div class="sign-in-title">Not signed in</div>
           <div class="sign-in-subtitle">Limited to 1 free suggestion</div>
         </div>
-        <button id="signInBtn" class="sign-in-btn">Sign In</button>
+        <div class="sign-in-buttons">
+          <button id="signInBtn" class="sign-in-btn">Sign In</button>
+          <button id="syncAuthBtn" class="sync-auth-btn" title="Sync with web app if already signed in">🔄</button>
+        </div>
       </div>
     `;
+  }
+
+  private renderThumbnail(item: QueuedElement): string {
+    const elementScreenshot = item.elementData?.elementScreenshot;
+    
+    if (elementScreenshot) {
+      return `<div class="queue-item-thumbnail">
+        <img src="${elementScreenshot}" alt="Element thumbnail" />
+      </div>`;
+    }
+    
+    // Fallback icon based on element type
+    const tagName = item.elementData?.tagName?.toLowerCase() || 'div';
+    const icon = this.getElementIcon(tagName);
+    
+    return `<div class="queue-item-thumbnail queue-item-icon">
+      ${icon}
+    </div>`;
+  }
+
+  private getElementIcon(tagName: string): string {
+    switch (tagName) {
+      case 'button': return '🔘';
+      case 'input': return '📝';
+      case 'img': return '🖼️';
+      case 'nav': return '🧭';
+      case 'header': return '📄';
+      case 'footer': return '📑';
+      case 'section': return '📋';
+      case 'article': return '📰';
+      case 'aside': return '📌';
+      case 'form': return '📋';
+      default: return '📦';
+    }
   }
 
   private attachEventListeners() {
@@ -144,6 +184,11 @@ class PopupManager {
         url: 'http://localhost:3000/auth/signup' 
       });
       window.close();
+    });
+
+    // Sync auth button (for local development)
+    document.getElementById('syncAuthBtn')?.addEventListener('click', () => {
+      this.syncAuthWithWebApp();
     });
 
     // Sign out button
@@ -183,6 +228,7 @@ class PopupManager {
 
     this.queueContainer.innerHTML = displayQueue.map(item => `
       <div class="queue-item ${item.status}">
+        ${this.renderThumbnail(item)}
         <div class="queue-item-info">
           <div class="queue-item-title">${this.getElementTitle(item)}</div>
           <div class="queue-item-url">${this.formatUrl(item.url)}</div>
@@ -379,6 +425,53 @@ class PopupManager {
       window.location.reload();
     } catch (error) {
       console.error('Sign out error:', error);
+    }
+  }
+
+  private async syncAuthWithWebApp() {
+    try {
+      // Show loading state
+      const syncBtn = document.getElementById('syncAuthBtn') as HTMLButtonElement;
+      if (syncBtn) {
+        syncBtn.textContent = '⏳';
+        syncBtn.disabled = true;
+      }
+
+      // Try to fetch auth status from the web app
+      const response = await fetch('http://localhost:3000/api/auth/status', {
+        credentials: 'include' // Include cookies for session
+      });
+
+      if (response.ok) {
+        const authData = await response.json();
+        
+        if (authData.authenticated && authData.user) {
+          // Store auth data in extension
+          await chrome.storage.local.set({
+            userAuthenticated: true,
+            userProfile: authData.user,
+            userSession: authData.session || {}
+          });
+          
+          // Refresh popup to show signed in state
+          window.location.reload();
+        } else {
+          // User not signed in on web app
+          alert('You are not signed in on the web app. Please sign in first at localhost:3000');
+        }
+      } else {
+        throw new Error('Failed to fetch auth status');
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      alert('Sync failed. Make sure you are signed in at localhost:3000 and try again.');
+      
+      // Reset button
+      const syncBtn = document.getElementById('syncAuthBtn') as HTMLButtonElement;
+      if (syncBtn) {
+        syncBtn.textContent = '🔄';
+        syncBtn.disabled = false;
+      }
     }
   }
 }

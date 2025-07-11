@@ -8,10 +8,17 @@ export async function GET(request: NextRequest) {
     
     try {
       // Get all elements in the processing queue (simple query without relations)
+      console.log('Fetching queue items from database...');
+      
       const { data: queueItems, error } = await supabase
         .from('processing_queue')
         .select('*')
         .order('created_at', { ascending: false })
+
+      console.log('Database query result:', { 
+        itemCount: queueItems?.length || 0, 
+        error: error?.message || null 
+      });
 
       if (error) {
         console.error('Database error:', error)

@@ -117,56 +117,101 @@ export async function GET(request: NextRequest) {
       const actionsEl = document.getElementById('actions');
       
       try {
-        // Check if extension is installed
-        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-          statusEl.textContent = '📱 Syncing with extension...';
-          
-          // Send auth data to extension
-          const authData = {
-            authenticated: true,
-            user: {
-              id: '${data.session.user.id}',
-              email: '${data.session.user.email}',
-              name: '${data.session.user.user_metadata?.name || ''}',
-              avatar: '${data.session.user.user_metadata?.avatar_url || ''}'
-            },
-            session: {
-              access_token: '${data.session.access_token}',
-              refresh_token: '${data.session.refresh_token}'
-            }
-          };
-          
-          // Store in extension
-          chrome.storage.local.set({
-            userAuthenticated: true,
-            userProfile: authData.user,
-            userSession: authData.session
-          }, () => {
+        statusEl.textContent = '📱 Attempting to sync with extension...';
+        
+        // For local development, try multiple sync methods
+        const authData = {
+          authenticated: true,
+          user: {
+            id: '${data.session.user.id}',
+            email: '${data.session.user.email}',
+            name: '${data.session.user.user_metadata?.name || ''}',
+            avatar: '${data.session.user.user_metadata?.avatar_url || ''}'
+          },
+          session: {
+            access_token: '${data.session.access_token}',
+            refresh_token: '${data.session.refresh_token}'
+          }
+        };
+        
+        // Method 1: Try direct chrome extension API (works for published extensions)
+        if (typeof chrome !== 'undefined' && chrome.runtime) {
+          try {
+            await chrome.storage.local.set({
+              userAuthenticated: true,
+              userProfile: authData.user,
+              userSession: authData.session
+            });
+            
             statusEl.className = 'status success';
             statusEl.textContent = '✅ Extension synced successfully! You can now use all features.';
             actionsEl.style.display = 'block';
-          });
+            return;
+          } catch (chromeError) {
+            console.log('Chrome API method failed (expected for local extensions):', chromeError);
+          }
+        }
+        
+        // Method 2: Try postMessage to extension content scripts
+        try {
+          window.postMessage({
+            type: 'VIBE_UI_AUTH_SYNC',
+            data: authData
+          }, '*');
           
-        } else {
+          // Listen for confirmation
+          let syncConfirmed = false;
+          const handleMessage = (event) => {
+            if (event.data.type === 'VIBE_UI_AUTH_SYNC_CONFIRMED') {
+              syncConfirmed = true;
+              statusEl.className = 'status success';
+              statusEl.textContent = '✅ Extension synced via postMessage! You can now use all features.';
+              actionsEl.style.display = 'block';
+              window.removeEventListener('message', handleMessage);
+            }
+          };
+          window.addEventListener('message', handleMessage);
+          
+          // Wait 2 seconds for confirmation
+          setTimeout(() => {
+            if (!syncConfirmed) {
+              window.removeEventListener('message', handleMessage);
+              throw new Error('No response from extension');
+            }
+          }, 2000);
+          
+        } catch (postMessageError) {
+          console.log('PostMessage method failed:', postMessageError);
+          
+          // Method 3: Manual sync instructions
           statusEl.className = 'status info';
-          statusEl.textContent = '💡 Extension not detected. Please install the Vibe UI Assistant extension to continue.';
+          statusEl.innerHTML = \`
+            <strong>🔧 Local Extension Detected</strong><br>
+            For local development, manual sync required:<br>
+            <small style="margin-top: 8px; display: block;">
+              1. Open extension popup<br>
+              2. Click "Sign In" again<br>
+              3. Or reload extension in chrome://extensions/
+            </small>
+          \`;
           actionsEl.style.display = 'block';
         }
+        
       } catch (error) {
         console.error('Sync error:', error);
         statusEl.className = 'status error';
-        statusEl.textContent = '⚠️ Could not sync with extension. Please reload the extension and try again.';
+        statusEl.innerHTML = \`
+          <strong>⚠️ Sync Failed</strong><br>
+          Please manually sign in through the extension popup
+        \`;
         actionsEl.style.display = 'block';
       }
     }
     
-    // Auto-redirect after 5 seconds if extension sync works
+    // Auto-redirect after 8 seconds regardless of sync status
     setTimeout(() => {
-      const statusEl = document.getElementById('status');
-      if (statusEl.classList.contains('success')) {
-        location.href = '${next}';
-      }
-    }, 5000);
+      location.href = '${next}';
+    }, 8000);
     
     // Start sync process
     setTimeout(syncWithExtension, 1000);

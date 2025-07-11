@@ -20,6 +20,7 @@ class ElementSelector {
   constructor() {
     console.log('Vibe UI Assistant: Content script loaded');
     this.setupMessageListener();
+    this.setupAuthSyncListener();
     this.injectStyles();
   }
 
@@ -37,6 +38,34 @@ class ElementSelector {
           break;
       }
       return true; // Keep message channel open for async response
+    });
+  }
+
+  private setupAuthSyncListener() {
+    // Listen for auth sync messages from web pages (for local development)
+    window.addEventListener('message', async (event) => {
+      if (event.data.type === 'VIBE_UI_AUTH_SYNC') {
+        console.log('Vibe UI Assistant: Received auth sync message', event.data);
+        
+        try {
+          // Store auth data in extension storage
+          await chrome.storage.local.set({
+            userAuthenticated: event.data.data.authenticated,
+            userProfile: event.data.data.user,
+            userSession: event.data.data.session
+          });
+          
+          // Confirm sync success
+          window.postMessage({
+            type: 'VIBE_UI_AUTH_SYNC_CONFIRMED'
+          }, '*');
+          
+          console.log('Vibe UI Assistant: Auth sync completed successfully');
+          
+        } catch (error) {
+          console.error('Vibe UI Assistant: Auth sync failed:', error);
+        }
+      }
     });
   }
 
@@ -461,12 +490,17 @@ class ElementSelector {
       return;
     }
     
+    this.showLoadingMessage('Capturing element screenshot...');
+    
+    // Capture element screenshot before extracting data
+    const elementScreenshot = await this.captureElementScreenshot(element);
     const elementData = this.extractElementData(element);
     
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'FIND_INSPIRATION',
         elementData,
+        elementScreenshot,
         prompt
       });
       
@@ -479,6 +513,101 @@ class ElementSelector {
     } catch (error) {
       console.error('Failed to add to inspiration queue:', error);
       this.showErrorMessage('Failed to process request');
+    }
+  }
+
+  private async captureElementScreenshot(element: HTMLElement): Promise<string> {
+    try {
+      // Get element bounds
+      const rect = element.getBoundingClientRect();
+      
+      // Create a temporary canvas to capture just the element
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Could not get canvas context');
+      }
+      
+      // Set canvas size to element size
+      canvas.width = Math.max(rect.width, 100);
+      canvas.height = Math.max(rect.height, 100);
+      
+      // Use html2canvas if available, otherwise take full page screenshot
+      try {
+        // Request full page screenshot from background script
+        const fullScreenshot = await chrome.runtime.sendMessage({ 
+          type: 'CAPTURE_SCREENSHOT' 
+        });
+        
+        if (fullScreenshot) {
+          // Create image from full screenshot
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = fullScreenshot;
+          });
+          
+          // Calculate the device pixel ratio
+          const devicePixelRatio = window.devicePixelRatio || 1;
+          
+          // Draw the cropped element area
+          ctx.drawImage(
+            img,
+            rect.left * devicePixelRatio,
+            rect.top * devicePixelRatio,
+            rect.width * devicePixelRatio,
+            rect.height * devicePixelRatio,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          );
+          
+          return canvas.toDataURL('image/png', 0.8);
+        }
+      } catch (error) {
+        console.warn('Screenshot capture failed, using fallback:', error);
+      }
+      
+      // Fallback: create a simple visual representation
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.strokeStyle = '#3B82F6';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+      
+      ctx.fillStyle = '#374151';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        element.tagName || 'Element',
+        canvas.width / 2,
+        canvas.height / 2
+      );
+      
+      return canvas.toDataURL('image/png', 0.8);
+      
+    } catch (error) {
+      console.error('Failed to capture element screenshot:', error);
+      // Return a placeholder image
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 200;
+      canvas.height = 150;
+      
+      if (ctx) {
+        ctx.fillStyle = '#E5E7EB';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#6B7280';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Element', canvas.width / 2, canvas.height / 2);
+      }
+      
+      return canvas.toDataURL('image/png', 0.8);
     }
   }
 
